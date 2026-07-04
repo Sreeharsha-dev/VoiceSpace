@@ -4,49 +4,58 @@ import { Message } from '../types';
 export function useMessages() {
   const [messages, setMessages] = useState<Message[]>([]);
 
-  // Load initial from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem('voicespace_messages');
-    if (saved) {
-      try {
-        setMessages(JSON.parse(saved));
-      } catch (e) {
-        console.error(e);
+  const fetchMessages = async () => {
+    try {
+      const res = await fetch('/api/messages');
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(data);
       }
+    } catch (e) {
+      console.error('Failed to fetch messages', e);
     }
-  }, []);
-
-  const addMessage = (text: string) => {
-    const newMessage: Message = {
-      id: Math.random().toString(36).substring(2, 9),
-      text,
-      createdAt: Date.now(),
-      status: 'pending'
-    };
-    
-    setMessages(prev => {
-      const updated = [newMessage, ...prev];
-      localStorage.setItem('voicespace_messages', JSON.stringify(updated));
-      return updated;
-    });
   };
 
-  const resolveMessage = (id: string, resolution?: string) => {
-    setMessages(prev => {
-      const updated = prev.map(m => 
-        m.id === id ? { ...m, status: 'resolved', resolution } : m
-      );
-      localStorage.setItem('voicespace_messages', JSON.stringify(updated));
-      return updated;
-    });
+  useEffect(() => {
+    fetchMessages();
+  }, []);
+
+  const addMessage = async (text: string) => {
+    try {
+      const res = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      if (res.ok) {
+        const newMessage = await res.json();
+        setMessages(prev => [newMessage, ...prev]);
+      }
+    } catch (e) {
+      console.error('Failed to add message', e);
+    }
+  };
+
+  const resolveMessage = async (id: string, resolution?: string) => {
+    try {
+      const res = await fetch(`/api/messages/${id}/resolve`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolution })
+      });
+      if (res.ok) {
+        setMessages(prev => prev.map(m => 
+          m.id === id ? { ...m, status: 'resolved', resolution: resolution || '' } : m
+        ));
+      }
+    } catch (e) {
+      console.error('Failed to resolve message', e);
+    }
   };
 
   const deleteMessage = (id: string) => {
-    setMessages(prev => {
-      const updated = prev.filter(m => m.id !== id);
-      localStorage.setItem('voicespace_messages', JSON.stringify(updated));
-      return updated;
-    });
+    // For local UI update if needed, actual deletion API not implemented yet
+    setMessages(prev => prev.filter(m => m.id !== id));
   };
 
   return { messages, addMessage, resolveMessage, deleteMessage };
